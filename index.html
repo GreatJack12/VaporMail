@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vapormail — Disposable inboxes that just work</title>
+  <meta name="description" content="Free disposable email addresses. Generate a burner inbox, receive mail in real time, burn it when you're done. No signup." />
+
+  <!-- ============================================================
+       GITHUB PAGES DEPLOYMENT (quick reference — full guide in SETUP-GUIDE.md)
+       ------------------------------------------------------------
+       1. Push this file as `index.html` to the root of a public repo.
+       2. Repo Settings → Pages → Source: "Deploy from a branch" → main / root.
+       3. CUSTOM DOMAIN:
+          a. Repo Settings → Pages → Custom domain → enter e.g. mail.yourdomain.com
+             (GitHub auto-commits a `CNAME` file containing that hostname).
+          b. In your DNS (recommended: move the domain's DNS to Cloudflare,
+             since you need Cloudflare for Email Routing anyway):
+               - Subdomain (mail.yourdomain.com):
+                   CNAME  mail  →  <your-github-username>.github.io
+               - Apex (yourdomain.com):
+                   A  @  185.199.108.153
+                   A  @  185.199.109.153
+                   A  @  185.199.110.153
+                   A  @  185.199.111.153
+          c. In Cloudflare, set these web records to "DNS only" (grey cloud)
+             at least until GitHub issues the TLS cert, then enable
+             "Enforce HTTPS" in the Pages settings.
+          d. Email Routing adds its own MX records on the SAME domain —
+             MX (mail receiving) and A/CNAME (web hosting) coexist fine.
+       ============================================================ -->
+
+  <!-- Fonts: Inter (UI) + JetBrains Mono (addresses / code) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    /* ── Embedded Tailwind config: Linear/Vercel-inspired dark token system ── */
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            void:    '#09090B',   // page background
+            panel:   '#101013',   // cards / sidebar
+            panel2:  '#16161A',   // hover / nested surfaces
+            edge:    '#1F1F25',   // hairline borders
+            edge2:   '#2A2A33',   // emphasized borders
+            ink:     '#F4F4F5',   // primary text
+            ink2:    '#9A9AA3',   // secondary text
+            ink3:    '#5D5D67',   // muted text
+            accent:  '#6E6EF7',   // indigo — actions / focus
+            accent2: '#8F8FFF',   // accent hover
+            live:    '#34D399',   // "receiving" green
+            burn:    '#F87171',   // destructive red
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          },
+          boxShadow: {
+            glow: '0 0 0 1px rgba(110,110,247,.35), 0 8px 32px -8px rgba(110,110,247,.25)',
+            card: '0 1px 0 0 rgba(255,255,255,.03) inset, 0 8px 24px -12px rgba(0,0,0,.6)',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* ── Hand-rolled details Tailwind CDN can't express cleanly ── */
+    ::selection { background: rgba(110,110,247,.35); }
+    html { color-scheme: dark; }
+    body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+    /* Visible keyboard focus, quiet mouse focus */
+    :focus-visible { outline: 2px solid #6E6EF7; outline-offset: 2px; border-radius: 6px; }
+    :focus:not(:focus-visible) { outline: none; }
+
+    /* Pulse tracker: thin sweep line that fills over each 5s poll cycle */
+    #pulse-fill {
+      background: linear-gradient(90deg, rgba(110,110,247,.15), #6E6EF7 60%, #8F8FFF);
+      box-shadow: 0 0 12px rgba(110,110,247,.7);
+      transition: width .12s linear;
+    }
+    @keyframes ping-dot { 0% { transform: scale(1); opacity:.9 } 70% { transform: scale(2.4); opacity:0 } 100% { opacity:0 } }
+    .ping::after {
+      content:''; position:absolute; inset:0; border-radius:9999px;
+      background: currentColor; animation: ping-dot 1.6s cubic-bezier(0,0,.2,1) infinite;
+    }
+
+    /* Subtle card entrance for newly rendered messages */
+    @keyframes rise { from { opacity:0; transform: translateY(4px) } to { opacity:1; transform:none } }
+    .rise { animation: rise .25s ease both; }
+
+    /* Reader iframe fills its card */
+    #reader-frame { width:100%; min-height:420px; border:0; background:#fff; border-radius:10px; }
+
+    /* Scrollbars in the Linear style */
+    ::-webkit-scrollbar { width:10px; height:10px }
+    ::-webkit-scrollbar-thumb { background:#26262e; border-radius:8px; border:2px solid #09090B }
+    ::-webkit-scrollbar-thumb:hover { background:#33333d }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+
+  <!-- ============================================================
+       GOOGLE ADSENSE — site-level script
+       Paste your AdSense site snippet here after approval, e.g.:
+       <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+       Each slot below is a clearly-commented placeholder container.
+       IMPORTANT (policy): keep every ad container visibly labeled
+       ("Advertisement" / "Sponsored") and never style ads to be
+       mistaken for real emails — labels are what keeps native
+       placements compliant with AdSense guidelines.
+       ============================================================ -->
+</head>
+
+<body class="bg-void text-ink font-sans min-h-screen">
+
+  <!-- ════════════════════════════════════════════════════════════
+       STICKY PULSE TRACKER — pinned to the very top of the viewport.
+       A 3px sweep fills over each 5-second poll cycle; the label
+       counts down and flips to "Checking…" during the fetch.
+       ════════════════════════════════════════════════════════════ -->
+  <div class="fixed top-0 inset-x-0 z-50">
+    <div class="h-[3px] bg-edge/60">
+      <div id="pulse-fill" class="h-full w-0"></div>
+    </div>
+    <div class="flex justify-center">
+      <div class="mt-2 flex items-center gap-2 rounded-full border border-edge bg-panel/90 backdrop-blur px-3 py-1 text-[11px] text-ink2 shadow-card">
+        <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-live text-live ping"></span>
+        <span id="pulse-label">Checking for new mail…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ HEADER ════════════════ -->
+  <header class="pt-12 pb-2">
+    <div class="mx-auto max-w-[1400px] px-4 sm:px-6 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <!-- wordmark -->
+        <div class="h-8 w-8 rounded-lg bg-accent/15 border border-accent/30 grid place-items-center shadow-glow">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M3 7l9 6 9-6" stroke="#8F8FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 18c4-1 5-4 5-7M20 18c-4-1-5-4-5-7" stroke="#8F8FFF" stroke-width="2" stroke-linecap="round" opacity=".5"/>
+          </svg>
+        </div>
+        <div>
+          <div class="text-sm font-semibold tracking-tight">vapormail</div>
+          <div class="text-[11px] text-ink3 -mt-0.5">disposable inboxes, zero signup</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="demo-badge" class="hidden text-[11px] font-medium text-amber-300/90 border border-amber-300/20 bg-amber-300/5 rounded-full px-2.5 py-1">Demo mode — add Supabase keys to go live</span>
+        <span class="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono text-ink2 border border-edge rounded-full px-2.5 py-1 bg-panel">
+          <span class="h-1.5 w-1.5 rounded-full bg-live"></span><span id="domain-badge">@yourdomain.com</span>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ════════════════ APP LAYOUT ════════════════ -->
+  <main class="mx-auto max-w-[1400px] px-4 sm:px-6 pb-16 pt-4
+               grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)] items-start">
+
+    <!-- ── SIDEBAR: up to 3 simultaneous inboxes ── -->
+    <aside class="lg:sticky lg:top-14">
+      <div class="rounded-xl border border-edge bg-panel shadow-card p-3">
+        <div class="flex items-center justify-between px-1 pb-2">
+          <h2 class="text-[11px] font-semibold uppercase tracking-wider text-ink3">Your inboxes</h2>
+          <span id="inbox-count" class="text-[11px] text-ink3 font-mono">1/3</span>
+        </div>
+        <nav id="inbox-list" class="flex lg:flex-col gap-2 overflow-x-auto pb-1" aria-label="Inboxes"></nav>
+
+        <button id="btn-add-inbox"
+          class="mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-edge2 px-3 py-2 text-xs font-medium text-ink2 hover:text-ink hover:border-accent/50 hover:bg-accent/5 transition-colors">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          New address
+        </button>
+
+        <button id="btn-burn"
+          class="mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg bg-burn/10 border border-burn/25 px-3 py-2 text-xs font-semibold text-burn hover:bg-burn/20 transition-colors">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2c1 4-3 5-3 9a3 3 0 006 0c0-1.5-.8-2.5-.8-2.5S17 10 17 13a5 5 0 11-10 0c0-5 5-6 5-11z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          Burn this inbox
+        </button>
+        <p class="px-1 pt-2 text-[10.5px] leading-relaxed text-ink3">Burning wipes the address and mints a fresh one. Addresses survive refreshes and browser restarts.</p>
+      </div>
+    </aside>
+
+    <!-- ── MAIN COLUMN ── -->
+    <div class="min-w-0 space-y-5">
+
+      <!-- ════════════════════════════════════════════════════════
+           AD SLOT 1 · LEADERBOARD (728×90) — above the fold,
+           directly above the generator card. Responsive: shrinks
+           on mobile. Replace the inner placeholder with your
+           AdSense <ins class="adsbygoogle"> responsive unit.
+           ════════════════════════════════════════════════════════ -->
+      <section aria-label="Advertisement" class="flex flex-col items-center gap-1">
+        <span class="self-start text-[10px] uppercase tracking-wider text-ink3">Advertisement</span>
+        <div id="ad-leaderboard"
+             class="w-full max-w-[728px] min-h-[90px] rounded-lg border border-dashed border-edge2 bg-panel/60 grid place-items-center">
+          <!-- ▼▼ PASTE ADSENSE LEADERBOARD UNIT HERE ▼▼ -->
+          <span class="text-[11px] font-mono text-ink3">728 × 90 leaderboard</span>
+          <!-- ▲▲ PASTE ADSENSE LEADERBOARD UNIT HERE ▲▲ -->
+        </div>
+      </section>
+
+      <!-- ── GENERATOR CARD: the active address ── -->
+      <section class="rounded-xl border border-edge bg-panel shadow-card p-5 sm:p-6">
+        <div class="flex items-center justify-between">
+          <h1 class="text-[13px] font-semibold text-ink2">Your temporary address</h1>
+          <span class="inline-flex items-center gap-1.5 text-[11px] text-live">
+            <span class="relative h-1.5 w-1.5 rounded-full bg-live ping"></span> receiving
+          </span>
+        </div>
+
+        <div class="mt-3 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div class="flex-1 min-w-0 rounded-lg border border-edge2 bg-void/60 px-4 py-3">
+            <span id="active-address" class="block font-mono text-base sm:text-lg font-medium text-ink truncate select-all">…</span>
+          </div>
+          <div class="flex gap-2">
+            <button id="btn-copy"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-3 text-xs font-semibold text-white hover:bg-accent2 transition-colors shadow-glow">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 012-2h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              Copy
+            </button>
+            <button id="btn-refresh" title="Check now"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-edge2 bg-panel2 px-3.5 py-3 text-xs font-medium text-ink2 hover:text-ink hover:border-accent/40 transition-colors">
+              <svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12a9 9 0 11-2.6-6.4M21 4v5h-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Check now
+            </button>
+          </div>
+        </div>
+        <p class="mt-3 text-[11.5px] text-ink2">Use it anywhere a site demands an email. Messages land here automatically — <span class="text-ink3">created <span id="active-created">just now</span></span>.</p>
+      </section>
+
+      <!-- ── INBOX + READER GRID ── -->
+      <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]" id="content-grid">
+
+        <!-- LEFT: message list, then reader replaces/joins it -->
+        <div class="min-w-0 space-y-5">
+
+          <!-- Message feed -->
+          <section class="rounded-xl border border-edge bg-panel shadow-card">
+            <div class="flex items-center justify-between border-b border-edge px-4 py-3">
+              <h2 class="text-[13px] font-semibold">Inbox</h2>
+              <span id="msg-count" class="text-[11px] text-ink3 font-mono">0 messages</span>
+            </div>
+            <!-- Native ad cards are injected every 4th slot by renderInbox() -->
+            <ol id="message-list" class="divide-y divide-edge"></ol>
+
+            <!-- Empty state -->
+            <div id="empty-state" class="px-6 py-14 text-center">
+              <div class="mx-auto h-10 w-10 rounded-xl border border-edge2 bg-panel2 grid place-items-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7l9 6 9-6M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z" stroke="#5D5D67" stroke-width="1.6" stroke-linejoin="round"/></svg>
+              </div>
+              <p class="mt-3 text-sm font-medium text-ink2">Waiting for the first message</p>
+              <p class="mt-1 text-[11.5px] text-ink3">Send anything to your address above — it appears here within ~5 seconds.</p>
+            </div>
+          </section>
+
+          <!-- READER PANE (hidden until a message is opened) -->
+          <section id="reader" class="hidden rounded-xl border border-edge bg-panel shadow-card rise">
+            <div class="flex items-start justify-between gap-3 border-b border-edge px-4 sm:px-5 py-4">
+              <div class="min-w-0">
+                <h2 id="reader-subject" class="text-base font-semibold tracking-tight truncate">Subject</h2>
+                <p class="mt-1 text-[11.5px] text-ink2 truncate">
+                  <span id="reader-from" class="text-ink font-medium">sender</span>
+                  <span class="text-ink3"> → </span><span id="reader-to" class="font-mono"></span>
+                  <span class="text-ink3"> · </span><span id="reader-time"></span>
+                </p>
+              </div>
+              <button id="btn-close-reader" class="shrink-0 rounded-lg border border-edge2 bg-panel2 p-2 text-ink2 hover:text-ink" title="Close (Esc)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+            <div class="p-4 sm:p-5">
+              <!-- Untrusted email HTML renders inside a sandboxed iframe: scripts and
+                   forms are blocked; allow-popups lets verification links open in a new tab. -->
+              <iframe id="reader-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Email content"></iframe>
+              <pre id="reader-text" class="hidden whitespace-pre-wrap font-sans text-sm leading-relaxed text-ink2"></pre>
+            </div>
+          </section>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+             AD SLOT 3 · STICKY HALF-PAGE (300×600) — anchored to the
+             right of the reading pane; position:sticky keeps it in
+             view while users scroll long verification emails.
+             Hidden below xl to protect mobile UX (and policy).
+             ════════════════════════════════════════════════════════ -->
+        <aside class="hidden xl:block" aria-label="Advertisement">
+          <div class="sticky top-14 flex flex-col gap-1">
+            <span class="text-[10px] uppercase tracking-wider text-ink3">Advertisement</span>
+            <div id="ad-halfpage"
+                 class="w-[300px] h-[600px] rounded-lg border border-dashed border-edge2 bg-panel/60 grid place-items-center">
+              <!-- ▼▼ PASTE ADSENSE 300×600 UNIT HERE ▼▼ -->
+              <span class="text-[11px] font-mono text-ink3">300 × 600 half-page</span>
+              <!-- ▲▲ PASTE ADSENSE 300×600 UNIT HERE ▲▲ -->
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t border-edge py-6">
+    <p class="text-center text-[11px] text-ink3">
+      vapormail · inboxes are public and auto-purge after 24h · don't use for anything sensitive
+    </p>
+  </footer>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 hidden rounded-lg border border-edge2 bg-panel2 px-4 py-2.5 text-xs font-medium text-ink shadow-card"></div>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       APPLICATION LOGIC — Vanilla ES6+, no build step, no backend.
+       ═════════════════════════════════════════════════════════════ -->
+  <script>
+  'use strict';
+
+  /* ──────────────────────────────────────────────────────────────
+     CONFIG — the only section you must edit.
+     SUPABASE_ANON_KEY is the *public* anon key (safe to ship in a
+     static page; Row Level Security limits it to read-only).
+     ────────────────────────────────────────────────────────────── */
+  const CONFIG = {
+    SUPABASE_URL:      'https://YOUR_PROJECT_REF.supabase.co', // ← Supabase → Settings → API
+    SUPABASE_ANON_KEY: 'YOUR_PUBLIC_ANON_KEY',                 // ← public "anon" key (NOT service_role)
+    MAIL_DOMAIN:       'yourdomain.com',                       // ← domain hooked into Cloudflare Email Routing
+    POLL_INTERVAL_MS:  5000,
+    MAX_INBOXES:       3,
+    PAGE_SIZE:         50,
+  };
+
+  // Demo mode lights up automatically until real keys are pasted in,
+  // so the UI is fully explorable straight from GitHub Pages.
+  const DEMO = CONFIG.SUPABASE_URL.includes('YOUR_PROJECT_REF');
+
+  /* ────────────────────────── state ────────────────────────── */
+  const LS_SESSION = 'vapormail.session.v1';
+  const LS_READ    = 'vapormail.read.v1';
+
+  const state = {
+    session: null,              // { id, inboxes:[{address, createdAt}], activeIndex }
+    emails: {},                 // address → [email rows]
+    readIds: new Set(JSON.parse(localStorage.getItem(LS_READ) || '[]')),
+    openId: null,
+    pollTimer: null,
+    lastPollAt: Date.now(),
+    fetching: false,
+  };
+
+  /* ─────────────────── crypto-random identity ─────────────────── */
+  // Unbiased random string from a safe alphabet (no 0/O/1/l confusion).
+  function randomString(len, alphabet = 'abcdefghijkmnpqrstuvwxyz23456789') {
+    const out = [];
+    const max = 256 - (256 % alphabet.length); // rejection sampling → uniform
+    while (out.length < len) {
+      const bytes = crypto.getRandomValues(new Uint8Array(len * 2));
+      for (const b of bytes) {
+        if (b < max && out.length < len) out.push(alphabet[b % alphabet.length]);
+      }
+    }
+    return out.join('');
+  }
+
+  const newInbox = () => ({ address: `${randomString(8)}@${CONFIG.MAIL_DOMAIN}`, createdAt: Date.now() });
+
+  /* ─────────────── persistent session (localStorage) ─────────────── */
+  function loadSession() {
+    try {
+      const raw = localStorage.getItem(LS_SESSION);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s && Array.isArray(s.inboxes) && s.inboxes.length) return s;
+      }
+    } catch (_) { /* corrupted → regenerate */ }
+    const fresh = { id: randomString(24, 'abcdef0123456789'), inboxes: [newInbox()], activeIndex: 0, createdAt: Date.now() };
+    localStorage.setItem(LS_SESSION, JSON.stringify(fresh));
+    return fresh;
+  }
+  const saveSession = () => localStorage.setItem(LS_SESSION, JSON.stringify(state.session));
+  const saveRead    = () => localStorage.setItem(LS_READ, JSON.stringify([...state.readIds].slice(-500)));
+  const activeInbox = () => state.session.inboxes[state.session.activeIndex];
+
+  /* ───────────────────────── DOM refs ───────────────────────── */
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    pulseFill: $('pulse-fill'), pulseLabel: $('pulse-label'),
+    inboxList: $('inbox-list'), inboxCount: $('inbox-count'),
+    addInbox: $('btn-add-inbox'), burn: $('btn-burn'),
+    address: $('active-address'), created: $('active-created'),
+    copy: $('btn-copy'), refresh: $('btn-refresh'),
+    list: $('message-list'), empty: $('empty-state'), msgCount: $('msg-count'),
+    reader: $('reader'), readerSubject: $('reader-subject'), readerFrom: $('reader-from'),
+    readerTo: $('reader-to'), readerTime: $('reader-time'),
+    readerFrame: $('reader-frame'), readerText: $('reader-text'),
+    closeReader: $('btn-close-reader'),
+    toast: $('toast'), domainBadge: $('domain-badge'), demoBadge: $('demo-badge'),
+  };
+
+  /* ───────────────────────── helpers ───────────────────────── */
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  function relTime(iso) {
+    const d = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (d < 60) return 'just now';
+    if (d < 3600) return `${Math.floor(d / 60)}m ago`;
+    if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
+    return new Date(iso).toLocaleDateString();
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => els.toast.classList.add('hidden'), 2200);
+  }
+
+  /* ─────────────────────── data layer ───────────────────────
+     Reads rows the Cloudflare Email Worker wrote into Supabase:
+     GET /rest/v1/emails?recipient=eq.<address>&order=received_at.desc
+     Auth: public anon key + RLS SELECT-only policy.            */
+  async function fetchEmails(address) {
+    if (DEMO) return demoEmails(address);
+    const url = `${CONFIG.SUPABASE_URL}/rest/v1/emails`
+      + `?select=id,recipient,sender,sender_name,subject,html_body,text_body,received_at`
+      + `&recipient=eq.${encodeURIComponent(address.toLowerCase())}`
+      + `&order=received_at.desc&limit=${CONFIG.PAGE_SIZE}`;
+    const res = await fetch(url, {
+      headers: { apikey: CONFIG.SUPABASE_ANON_KEY, Authorization: `Bearer ${CONFIG.SUPABASE_ANON_KEY}` },
+    });
+    if (!res.ok) throw new Error(`Supabase ${res.status}`);
+    return res.json();
+  }
+
+  /* ───────────────────── polling loop (5s) ─────────────────────
+     Chained setTimeout (never overlapping requests), paused while
+     the tab is hidden to save Supabase quota.                    */
+  async function pollOnce({ manual = false } = {}) {
+    if (state.fetching) return;
+    state.fetching = true;
+    els.pulseLabel.textContent = 'Checking for new mail…';
+    try {
+      const addr = activeInbox().address;
+      const rows = await fetchEmails(addr);
+      const prevIds = new Set((state.emails[addr] || []).map(e => e.id));
+      state.emails[addr] = rows;
+      const fresh = rows.filter(e => !prevIds.has(e.id));
+      if (fresh.length && prevIds.size) toast(`📬 ${fresh.length} new message${fresh.length > 1 ? 's' : ''}`);
+      renderInbox();
+      renderSidebar();
+    } catch (err) {
+      console.warn('[vapormail] poll failed:', err.message);
+      if (manual) toast('Could not reach the mail database');
+    } finally {
+      state.fetching = false;
+      state.lastPollAt = Date.now();
+      scheduleNextPoll();
+    }
+  }
+
+  function scheduleNextPoll() {
+    clearTimeout(state.pollTimer);
+    state.pollTimer = setTimeout(() => {
+      if (document.hidden) { state.lastPollAt = Date.now(); scheduleNextPoll(); }
+      else pollOnce();
+    }, CONFIG.POLL_INTERVAL_MS);
+  }
+
+  // Pulse tracker animation — fills the top bar across each cycle.
+  function tickPulse() {
+    const elapsed = Date.now() - state.lastPollAt;
+    const pct = Math.min(100, (elapsed / CONFIG.POLL_INTERVAL_MS) * 100);
+    els.pulseFill.style.width = pct + '%';
+    if (!state.fetching) {
+      const s = Math.max(0, Math.ceil((CONFIG.POLL_INTERVAL_MS - elapsed) / 1000));
+      els.pulseLabel.textContent = `Checking for new mail… auto-refreshing in ${s}s`;
+    }
+    requestAnimationFrame(tickPulse);
+  }
+
+  /* ───────────────────────── rendering ───────────────────────── */
+  function renderSidebar() {
+    const { inboxes, activeIndex } = state.session;
+    els.inboxCount.textContent = `${inboxes.length}/${CONFIG.MAX_INBOXES}`;
+    els.addInbox.disabled = inboxes.length >= CONFIG.MAX_INBOXES;
+    els.addInbox.classList.toggle('opacity-40', els.addInbox.disabled);
+    els.addInbox.classList.toggle('pointer-events-none', els.addInbox.disabled);
+
+    els.inboxList.innerHTML = inboxes.map((ib, i) => {
+      const active = i === activeIndex;
+      const count = (state.emails[ib.address] || []).length;
+      const unread = (state.emails[ib.address] || []).filter(e => !state.readIds.has(e.id)).length;
+      return `
+        <button data-inbox="${i}" aria-current="${active}"
+          class="group shrink-0 lg:shrink lg:w-full text-left rounded-lg border px-3 py-2.5 transition-colors
+                 ${active ? 'border-accent/50 bg-accent/10' : 'border-edge bg-panel2/40 hover:bg-panel2 hover:border-edge2'}">
+          <span class="flex items-center justify-between gap-2">
+            <span class="font-mono text-[11.5px] ${active ? 'text-ink' : 'text-ink2'} truncate">${esc(ib.address)}</span>
+            ${unread ? `<span class="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[9.5px] font-bold text-white">${unread}</span>` : ''}
+          </span>
+          <span class="mt-0.5 block text-[10px] text-ink3">${count} message${count === 1 ? '' : 's'} · ${relTime(new Date(ib.createdAt).toISOString())}</span>
+        </button>`;
+    }).join('');
+  }
+
+  function renderGenerator() {
+    const ib = activeInbox();
+    els.address.textContent = ib.address;
+    els.created.textContent = relTime(new Date(ib.createdAt).toISOString());
+    els.domainBadge.textContent = '@' + CONFIG.MAIL_DOMAIN;
+  }
+
+  // Builds one email row card.
+  const emailCard = (e) => {
+    const unread = !state.readIds.has(e.id);
+    return `
+      <li class="rise">
+        <button data-open="${esc(e.id)}" class="w-full text-left px-4 py-3.5 hover:bg-panel2/70 transition-colors flex gap-3 items-start">
+          <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${unread ? 'bg-accent' : 'bg-edge2'}"></span>
+          <span class="min-w-0 flex-1">
+            <span class="flex items-baseline justify-between gap-3">
+              <span class="text-[13px] font-semibold ${unread ? 'text-ink' : 'text-ink2'} truncate">${esc(e.sender_name || e.sender || 'Unknown sender')}</span>
+              <span class="shrink-0 text-[10.5px] text-ink3 font-mono">${relTime(e.received_at)}</span>
+            </span>
+            <span class="block text-[12.5px] ${unread ? 'text-ink' : 'text-ink2'} truncate">${esc(e.subject || '(no subject)')}</span>
+            <span class="block text-[11.5px] text-ink3 truncate">${esc((e.text_body || '').replace(/\s+/g, ' ').slice(0, 120))}</span>
+          </span>
+        </button>
+      </li>`;
+  };
+
+  /* ════════════════════════════════════════════════════════════
+     AD SLOT 2 · NATIVE IN-FEED — injected as every 4th list item.
+     Same card geometry, spacing, and type scale as a real email,
+     but ALWAYS labeled "Sponsored" (required: AdSense prohibits
+     ads users could mistake for content). Replace the inner
+     placeholder with an AdSense In-feed (Native) unit.
+     ════════════════════════════════════════════════════════════ */
+  const nativeAdCard = (n) => `
+    <li aria-label="Sponsored content">
+      <div class="px-4 py-3.5 flex gap-3 items-start bg-panel">
+        <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-edge2"></span>
+        <div class="min-w-0 flex-1" id="ad-native-${n}">
+          <!-- ▼▼ PASTE ADSENSE IN-FEED (NATIVE) UNIT HERE ▼▼ -->
+          <span class="flex items-baseline justify-between gap-3">
+            <span class="text-[13px] font-semibold text-ink2">Sponsored</span>
+            <span class="shrink-0 text-[10px] uppercase tracking-wider text-ink3 border border-edge2 rounded px-1.5 py-0.5">Ad</span>
+          </span>
+          <span class="block text-[12.5px] text-ink2">Native in-feed ad slot</span>
+          <span class="block text-[11.5px] text-ink3">Matches the feed's card geometry · clearly labeled</span>
+          <!-- ▲▲ PASTE ADSENSE IN-FEED (NATIVE) UNIT HERE ▲▲ -->
+        </div>
+      </div>
+    </li>`;
+
+  function renderInbox() {
+    const rows = state.emails[activeInbox().address] || [];
+    els.msgCount.textContent = `${rows.length} message${rows.length === 1 ? '' : 's'}`;
+    els.empty.classList.toggle('hidden', rows.length > 0);
+
+    // Every 4th slot is a native ad: [m, m, m, AD, m, m, m, AD, …]
+    const parts = [];
+    let adN = 0;
+    rows.forEach((e, i) => {
+      parts.push(emailCard(e));
+      if ((i + 1) % 3 === 0 && i < rows.length - 1) parts.push(nativeAdCard(++adN));
+    });
+    els.list.innerHTML = parts.join('');
+
+    // Keep an open reader in sync if its message still exists.
+    if (state.openId && !rows.some(e => e.id === state.openId)) closeReader();
+  }
+
+  function openReader(id) {
+    const rows = state.emails[activeInbox().address] || [];
+    const e = rows.find(r => String(r.id) === String(id));
+    if (!e) return;
+    state.openId = e.id;
+    state.readIds.add(e.id); saveRead();
+
+    els.readerSubject.textContent = e.subject || '(no subject)';
+    els.readerFrom.textContent = e.sender_name ? `${e.sender_name} <${e.sender}>` : (e.sender || 'Unknown');
+    els.readerTo.textContent = e.recipient;
+    els.readerTime.textContent = new Date(e.received_at).toLocaleString();
+
+    if (e.html_body) {
+      // sandbox="" → no scripts, no forms, no top-navigation: email HTML is fully inert.
+      els.readerFrame.srcdoc =
+        `<base target="_blank"><style>body{font:14px/1.6 -apple-system,Segoe UI,sans-serif;margin:16px;word-break:break-word}img{max-width:100%}</style>`
+        + e.html_body;
+      els.readerFrame.classList.remove('hidden');
+      els.readerText.classList.add('hidden');
+    } else {
+      els.readerText.textContent = e.text_body || '(empty message)';
+      els.readerText.classList.remove('hidden');
+      els.readerFrame.classList.add('hidden');
+    }
+    els.reader.classList.remove('hidden');
+    els.reader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    renderInbox(); renderSidebar(); // refresh unread dots
+  }
+
+  function closeReader() {
+    state.openId = null;
+    els.reader.classList.add('hidden');
+    els.readerFrame.srcdoc = '';
+  }
+
+  /* ───────────────────── inbox actions ───────────────────── */
+  function setActive(i) {
+    state.session.activeIndex = i;
+    saveSession();
+    renderGenerator(); renderSidebar(); renderInbox(); closeReader();
+    state.lastPollAt = 0;        // make the pulse fill immediately…
+    pollOnce({ manual: true });  // …and fetch the new inbox right away
+  }
+
+  function addInbox() {
+    if (state.session.inboxes.length >= CONFIG.MAX_INBOXES) return;
+    state.session.inboxes.push(newInbox());
+    setActive(state.session.inboxes.length - 1);
+    toast('New address minted');
+  }
+
+  function burnInbox() {
+    const old = activeInbox().address;
+    if (!confirm(`Burn ${old}?\n\nThe address is wiped and a fresh one replaces it. This can't be undone.`)) return;
+    delete state.emails[old];
+    state.session.inboxes[state.session.activeIndex] = newInbox();
+    saveSession();
+    setActive(state.session.activeIndex);
+    toast('🔥 Inbox burned — fresh address ready');
+  }
+
+  async function copyAddress() {
+    try { await navigator.clipboard.writeText(activeInbox().address); toast('Address copied'); }
+    catch { toast('Copy failed — select the address manually'); }
+  }
+
+  /* ───────────────────── demo data (placeholder keys only) ───────────────────── */
+  function demoEmails(address) {
+    const t = (m) => new Date(Date.now() - m * 60000).toISOString();
+    const seed = [
+      { id: 'd1', sender: 'no-reply@accounts.example',  sender_name: 'Example Accounts', subject: 'Your verification code is 482910', text_body: 'Enter 482910 to finish signing up. The code expires in 10 minutes.', html_body: '<div style="padding:24px;font-family:sans-serif"><h2 style="margin:0 0 8px">Verify your email</h2><p>Your one-time code:</p><p style="font-size:28px;letter-spacing:6px;font-weight:700">482910</p><p style="color:#666">Expires in 10 minutes.</p></div>', received_at: t(2) },
+      { id: 'd2', sender: 'team@newsletter.example',    sender_name: 'The Weekly Stack', subject: 'Issue #114 — static sites are eating the web', text_body: 'This week: GitHub Pages tricks, edge workers, and why your side project does not need a server.', html_body: null, received_at: t(18) },
+      { id: 'd3', sender: 'hello@trialapp.example',     sender_name: 'TrialApp',         subject: 'Welcome! Confirm your account', text_body: 'Click the button below to confirm your account and start your 14-day trial.', html_body: '<div style="padding:24px;font-family:sans-serif"><p>Thanks for signing up.</p><p><a href="#" style="background:#6E6EF7;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Confirm account</a></p></div>', received_at: t(41) },
+      { id: 'd4', sender: 'receipts@shop.example',      sender_name: 'Shop',             subject: 'Order #10293 confirmed', text_body: 'Your order is confirmed and will ship in 2–3 business days.', html_body: null, received_at: t(95) },
+      { id: 'd5', sender: 'security@vault.example',     sender_name: 'Vault Security',   subject: 'New sign-in from San Luis Obispo, CA', text_body: 'We noticed a new sign-in. If this was you, no action is needed.', html_body: null, received_at: t(160) },
+    ];
+    // Deterministic per address so switching inboxes feels real.
+    const n = [...address].reduce((a, c) => a + c.charCodeAt(0), 0) % 3 + 3;
+    return Promise.resolve(seed.slice(0, n).map(e => ({ ...e, id: address + ':' + e.id, recipient: address })));
+  }
+
+  /* ───────────────────────── boot ───────────────────────── */
+  function init() {
+    state.session = loadSession();
+    if (DEMO) els.demoBadge.classList.remove('hidden');
+
+    renderGenerator(); renderSidebar(); renderInbox();
+
+    els.copy.addEventListener('click', copyAddress);
+    els.refresh.addEventListener('click', () => { toast('Checking…'); pollOnce({ manual: true }); });
+    els.addInbox.addEventListener('click', addInbox);
+    els.burn.addEventListener('click', burnInbox);
+    els.closeReader.addEventListener('click', closeReader);
+    els.inboxList.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-inbox]'); if (b) setActive(Number(b.dataset.inbox));
+    });
+    els.list.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-open]'); if (b) openReader(b.dataset.open);
+    });
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeReader(); });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) pollOnce(); // instant catch-up when the tab returns
+    });
+
+    pollOnce();            // first fetch immediately
+    requestAnimationFrame(tickPulse);
+  }
+
+  init();
+  </script>
+</body>
+</html>
